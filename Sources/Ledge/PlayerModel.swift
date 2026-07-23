@@ -38,6 +38,8 @@ final class PlayerModel: ObservableObject {
 
     private var lastPlaying = Date.distantPast
     private let queue = DispatchQueue(label: "ledge.scripting", qos: .userInitiated)
+    // Artwork fetches run here so they don't wait behind the 1s status polls.
+    private let artworkQueue = DispatchQueue(label: "ledge.artwork", qos: .userInitiated)
     private var timer: Timer?
     private var artworkCache: [String: NSImage] = [:]
 
@@ -200,7 +202,7 @@ final class PlayerModel: ObservableObject {
                 DispatchQueue.main.async { self?.store(img, for: t) }
             }.resume()
         case .music:
-            queue.async { [weak self] in
+            artworkQueue.async { [weak self] in
                 guard let self else { return }
                 var err: NSDictionary?
                 let src = "tell application \"Music\" to get raw data of artwork 1 of current track"
