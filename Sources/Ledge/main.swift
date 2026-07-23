@@ -27,6 +27,12 @@ final class FloatPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Don't let AppKit pull the window back inside the screen while dragging —
+    /// this is what caused the "sticking at the edges" feel. Fully free placement.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
 }
 
 // MARK: - App delegate
@@ -98,7 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let dockBand = screen.visibleFrame.minY - screen.frame.minY
 
         var origin: NSPoint
-        if let saved = savedOrigin(for: screen) {
+        let saved = savedOrigin(for: screen)
+        if let saved, isReasonablyVisible(NSRect(origin: saved, size: Self.windowSize)) {
+            // Respect exactly where the user left it (even partly off an edge).
             origin = saved
         } else {
             // Default: glass floats just above the dock band, near the left edge.
@@ -108,8 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             origin = NSPoint(x: glassX - Self.margin, y: glassY - Self.margin)
         }
 
-        var frame = NSRect(origin: origin, size: Self.windowSize)
-        frame = clamp(frame, to: screen)
+        let frame = NSRect(origin: origin, size: Self.windowSize)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
     }
 
@@ -155,16 +162,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func screenContaining(_ frame: NSRect) -> NSScreen? {
         let c = NSPoint(x: frame.midX, y: frame.midY)
         return NSScreen.screens.first { $0.frame.contains(c) }
+            ?? NSScreen.screens.max { a, b in
+                a.frame.intersection(frame).area < b.frame.intersection(frame).area
+            }
     }
 
-    /// Keep the whole window on-screen.
-    private func clamp(_ frame: NSRect, to screen: NSScreen) -> NSRect {
-        let v = screen.frame
-        var r = frame
-        r.origin.x = min(max(r.origin.x, v.minX), v.maxX - r.width)
-        r.origin.y = min(max(r.origin.y, v.minY), v.maxY - r.height)
-        return r
+    /// True if enough of the widget lands on some screen that it isn't lost —
+    /// used only to fall back to the default if a saved spot is now off-screen
+    /// (e.g. a display was unplugged), never to reposition an otherwise-fine spot.
+    private func isReasonablyVisible(_ frame: NSRect) -> Bool {
+        for s in NSScreen.screens {
+            let i = s.frame.intersection(frame)
+            if i.width > 60, i.height > 40 { return true }
+        }
+        return false
     }
+}
+
+private extension NSRect {
+    var area: CGFloat { width * height }
 }
 
 // MARK: - Bootstrap
