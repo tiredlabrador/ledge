@@ -43,9 +43,9 @@ That's it. Start playing something and the widget appears.
 
 ### Where it sits
 
-Ledge starts just above the left end of your Dock and follows whichever screen the
-Dock is on. Don't like that spot? Just drag it wherever you want — it stays put and
-remembers its place per display. *Reset Position* puts it back to the default. No
+Ledge starts in the bottom-right, just above your Dock, and follows whichever screen
+the Dock is on. Don't like that spot? Just drag it wherever you want — it stays put
+and remembers its place per display. *Reset Position* puts it back to the default. No
 special permissions needed for any of this.
 
 ## Build from source

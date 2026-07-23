@@ -19,7 +19,7 @@ final class FloatPanel: NSPanel {
         hasShadow = false // the SwiftUI glass draws its own
         hidesOnDeactivate = false
         isMovable = true
-        isMovableByWindowBackground = true // drag the pill anywhere but its controls
+        isMovableByWindowBackground = false // we move the window ourselves (no magnetism)
         becomesKeyOnlyIfNeeded = true
         acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
@@ -70,6 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         p.orderFrontRegardless()
 
         model.onResetPosition = { [weak self] in self?.resetPosition() }
+        model.currentWindowOrigin = { [weak self] in self?.panel.frame.origin ?? .zero }
+        model.onMoveWindowTo = { [weak self] p in self?.panel.setFrameOrigin(p) }
         model.onUpdate = { [weak self] in self?.sync() }
         model.start()
 
@@ -109,9 +111,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Respect exactly where the user left it (even partly off an edge).
             origin = saved
         } else {
-            // Default: glass floats just above the dock band, near the left edge.
+            // Default: bottom-right, just above the dock band. On a centred dock
+            // (e.g. a big display) that reads as the bottom-right corner; on a wide
+            // dock (e.g. a laptop) it sits just above the dock's right end.
             let band = dockBand > 8 ? dockBand : 8
-            let glassX = f.minX + 12
+            let glassX = f.maxX - Self.glassW - 12
             let glassY = f.minY + band + 6
             origin = NSPoint(x: glassX - Self.margin, y: glassY - Self.margin)
         }

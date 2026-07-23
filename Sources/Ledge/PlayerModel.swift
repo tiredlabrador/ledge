@@ -25,6 +25,11 @@ final class PlayerModel: ObservableObject {
     /// Called from the menu to clear the remembered position on this screen.
     var onResetPosition: (() -> Void)?
 
+    /// Window-drag plumbing, set by the app: read and set the panel's origin so
+    /// the view can move the window itself (no AppKit edge magnetism).
+    var currentWindowOrigin: (() -> CGPoint)?
+    var onMoveWindowTo: ((CGPoint) -> Void)?
+
     /// Set by the view; visibility logic keeps the widget up while hovered.
     var hovering = false { didSet { onUpdate?() } }
 

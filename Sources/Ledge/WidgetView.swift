@@ -1,11 +1,12 @@
+import AppKit
 import SwiftUI
 
 /// The player pill. At rest: artwork + title + artist, roomy and centred.
-/// On hover: large playback controls take over the whole text area, and a
-/// scrubbable progress bar fades in along the bottom.
+/// On hover: large playback controls take over the whole text area.
 struct WidgetView: View {
     @ObservedObject var model: PlayerModel
     @State private var hovering = false
+    @State private var dragAnchor: (mouse: CGPoint, origin: CGPoint)?
 
     // Keep in sync with AppDelegate.glassW / glassH / margin.
     static let glassW: CGFloat = 270
@@ -24,8 +25,26 @@ struct WidgetView: View {
                 withAnimation(.smooth(duration: 0.2)) { hovering = h }
                 model.hovering = h
             }
+            .simultaneousGesture(dragGesture)
             .contextMenu { menu }
             .padding(Self.margin) // transparent margin inside the window for shadow room
+    }
+
+    /// Move the whole window to follow the cursor, using absolute screen mouse
+    /// position so there's no drift and no AppKit edge magnetism. Buttons still
+    /// get their taps (this only kicks in past a small movement threshold).
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 3)
+            .onChanged { _ in
+                let mouse = NSEvent.mouseLocation
+                let anchor = dragAnchor ?? (mouse, model.currentWindowOrigin?() ?? .zero)
+                if dragAnchor == nil { dragAnchor = anchor }
+                model.onMoveWindowTo?(CGPoint(
+                    x: anchor.origin.x + (mouse.x - anchor.mouse.x),
+                    y: anchor.origin.y + (mouse.y - anchor.mouse.y)
+                ))
+            }
+            .onEnded { _ in dragAnchor = nil }
     }
 
     private var content: some View {
