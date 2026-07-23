@@ -36,17 +36,17 @@ That's it. Start playing something and the widget appears.
 
 - **Hover** to reveal ⏮ ⏯ ⏭ and the time remaining.
 - **Drag the bar** along the bottom to scrub.
-- **Click the artwork** to jump to the app it's playing from.
-- **Right-click** for options: *Snap next to Dock*, *Start at Login*, *Quit*.
+- **Drag the pill** (grab it anywhere but the buttons) to move it. It remembers
+  where you put it on each screen and restores there next time.
+- **Right-click** for options: *Open Music/Spotify*, *Reset Position*,
+  *Start at Login*, *Quit*.
 
 ### Where it sits
 
-Ledge floats just above the left end of your Dock — it never covers it, and it
-follows whichever screen your Dock is on. If you grant it **Accessibility** access
-(right-click → **Snap next to Dock**), it can tuck flush *beside* the Dock when
-there's room, and falls back to floating above on a narrow screen where there
-isn't. That permission is only used to read where your Dock is, and macOS resets
-it whenever the app is updated, so the float-above default is the reliable one.
+Ledge starts just above the left end of your Dock and follows whichever screen the
+Dock is on. Don't like that spot? Just drag it wherever you want — it stays put and
+remembers its place per display. *Reset Position* puts it back to the default. No
+special permissions needed for any of this.
 
 ## Build from source
 
