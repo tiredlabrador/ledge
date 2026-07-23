@@ -6,16 +6,11 @@ import SwiftUI
 struct WidgetView: View {
     @ObservedObject var model: PlayerModel
     @State private var hovering = false
-    @State private var scrubbing = false
-    @State private var scrubValue: Double = 0
 
     // Keep in sync with AppDelegate.glassW / glassH / margin.
     static let glassW: CGFloat = 270
     static let glassH: CGFloat = 60
     static let margin: CGFloat = 16
-
-    // Left inset that lines the progress bar up with the text (art + paddings).
-    private let textInset: CGFloat = 9 + 46 + 9
 
     var body: some View {
         content
@@ -47,16 +42,6 @@ struct WidgetView: View {
         }
         .padding(.horizontal, 9)
         .frame(maxHeight: .infinity)
-        // Progress bar overlaid on the bottom edge, aligned under the text only,
-        // fading in on hover so the resting pill stays clean and uncramped.
-        .overlay(alignment: .bottomLeading) {
-            progressBar
-                .padding(.leading, textInset)
-                .padding(.trailing, 10)
-                .padding(.bottom, 4)
-                .opacity(hovering ? 1 : 0)
-                .animation(.smooth(duration: 0.2), value: hovering)
-        }
     }
 
     // MARK: - Resting: title + artist
@@ -138,50 +123,16 @@ struct WidgetView: View {
         .help("Drag to move • right-click for options")
     }
 
-    // MARK: - Progress / scrubbing
-
-    private var displayedPosition: Double { scrubbing ? scrubValue : model.position }
+    // MARK: - Time remaining
 
     private var remainingText: String {
         guard let d = model.track?.duration, d > 0 else { return "" }
-        return "-" + Self.format(max(0, d - displayedPosition))
+        return "-" + Self.format(max(0, d - model.position))
     }
 
     private static func format(_ s: Double) -> String {
         let t = Int(s.rounded())
         return String(format: "%d:%02d", t / 60, t % 60)
-    }
-
-    private var progressBar: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let dur = model.track?.duration ?? 0
-            let frac = dur > 0 ? min(1, max(0, displayedPosition / dur)) : 0
-            ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.18))
-                Capsule().fill(.primary.opacity(scrubbing ? 1 : 0.85))
-                    .frame(width: max(3, w * frac))
-            }
-            .frame(height: scrubbing ? 5 : 3.5)
-            .frame(maxHeight: .infinity, alignment: .bottom)
-            .contentShape(Rectangle().inset(by: -9)) // large grab area above/below the line
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { v in
-                        guard dur > 0 else { return }
-                        scrubbing = true
-                        model.scrubbing = true
-                        scrubValue = min(dur, max(0, Double(v.location.x / w) * dur))
-                    }
-                    .onEnded { _ in
-                        guard dur > 0 else { scrubbing = false; model.scrubbing = false; return }
-                        model.seek(to: scrubValue)
-                        scrubbing = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { model.scrubbing = false }
-                    }
-            )
-        }
-        .frame(height: 12)
     }
 
     // MARK: - Context menu

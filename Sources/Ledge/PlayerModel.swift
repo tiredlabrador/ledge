@@ -22,15 +22,11 @@ final class PlayerModel: ObservableObject {
     @Published var visible = false
     @Published var sourceRunning = false
 
-    /// Whether to tuck the widget against the dock's left edge (needs Accessibility).
-    /// Off = bottom-left corner, no extra permission.
     /// Called from the menu to clear the remembered position on this screen.
     var onResetPosition: (() -> Void)?
 
     /// Set by the view; visibility logic keeps the widget up while hovered.
     var hovering = false { didSet { onUpdate?() } }
-    /// While true, polls don't overwrite `position` (user is dragging the bar).
-    var scrubbing = false
 
     var onUpdate: (() -> Void)?
 
@@ -175,7 +171,7 @@ final class PlayerModel: ObservableObject {
         track = newTrack
         isPlaying = raw.state == "playing"
         if isPlaying { lastPlaying = Date() }
-        if !scrubbing { position = raw.pos }
+        position = raw.pos
         if changed {
             artwork = artworkCache[newTrack.id]
             fetchArtwork(for: newTrack, urlString: raw.artURL)
@@ -228,11 +224,6 @@ final class PlayerModel: ObservableObject {
     func previous() {
         // Music's `back track` restarts the song first, then goes back — the native feel.
         run(cmd: track?.source == .music ? "back track" : "previous track")
-    }
-
-    func seek(to seconds: Double) {
-        position = seconds
-        run(cmd: "set player position to \(Int(seconds))")
     }
 
     private func run(cmd: String) {
