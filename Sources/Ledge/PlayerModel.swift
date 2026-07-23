@@ -113,7 +113,9 @@ final class PlayerModel: ObservableObject {
     }
 
     private func isRunning(_ bundleID: String) -> Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+        // Treat a terminating app as gone, so we never script it back to life.
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .contains { !$0.isTerminated }
     }
 
     func poll() {
@@ -128,13 +130,16 @@ final class PlayerModel: ObservableObject {
         }
         queue.async { [weak self] in
             guard let self else { return }
-            let m = queryMusic ? self.query(Self.musicStatusScript) : Raw()
-            let s = querySpotify ? self.query(Self.spotifyStatusScript) : Raw()
+            let m = queryMusic ? self.query(Self.musicStatusScript, bundleID: Self.musicBundleID) : Raw()
+            let s = querySpotify ? self.query(Self.spotifyStatusScript, bundleID: Self.spotifyBundleID) : Raw()
             DispatchQueue.main.async { self.apply(music: m, spotify: s) }
         }
     }
 
-    private func query(_ source: String) -> Raw {
+    private func query(_ source: String, bundleID: String) -> Raw {
+        // Re-check on the scripting thread, immediately before executing: sending
+        // an Apple Event to a quit app relaunches it, so bail if it's gone now.
+        guard isRunning(bundleID) else { return Raw() }
         var err: NSDictionary?
         guard let script = NSAppleScript(source: source),
               let out = script.executeAndReturnError(&err).stringValue else {
@@ -203,7 +208,7 @@ final class PlayerModel: ObservableObject {
             }.resume()
         case .music:
             artworkQueue.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.isRunning(Self.musicBundleID) else { return }
                 var err: NSDictionary?
                 let src = "tell application \"Music\" to get raw data of artwork 1 of current track"
                 let desc = NSAppleScript(source: src)?.executeAndReturnError(&err)
@@ -237,8 +242,10 @@ final class PlayerModel: ObservableObject {
     private func run(cmd: String) {
         guard let src = track?.source else { return }
         let app = src == .music ? "Music" : "Spotify"
+        let bundleID = src == .music ? Self.musicBundleID : Self.spotifyBundleID
         let script = "tell application \"\(app)\" to \(cmd)"
-        queue.async {
+        queue.async { [weak self] in
+            guard let self, self.isRunning(bundleID) else { return }
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
         }
