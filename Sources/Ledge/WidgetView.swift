@@ -25,6 +25,7 @@ struct WidgetView: View {
                 withAnimation(.smooth(duration: 0.2)) { hovering = h }
                 model.hovering = h
             }
+            .contentShape(Rectangle()) // whole pill is grabbable, not just the art/buttons
             .simultaneousGesture(dragGesture)
             .contextMenu { menu }
             .padding(Self.margin) // transparent margin inside the window for shadow room
@@ -161,7 +162,8 @@ struct WidgetView: View {
             model.openSourceApp()
         }
         Divider()
-        Button("Reset Position") { model.onResetPosition?() }
+        Button("Set Default Position") { model.onSetDefault?() }
+        Button("Reset to Default Position") { model.onResetPosition?() }
         Button((model.launchAtLogin ? "✓ " : "") + "Start at Login") {
             model.toggleLaunchAtLogin()
         }

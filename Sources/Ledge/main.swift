@@ -50,7 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static var windowSize: NSSize {
         NSSize(width: glassW + margin * 2, height: glassH + margin * 2)
     }
-    private static let positionsKey = "LedgePositions" // [displayID: [x, y]] window origins
+    private static let positionsKey = "LedgePositions" // [displayID: [x, y]] current spot
+    private static let defaultsKey = "LedgeDefaults"   // [displayID: [x, y]] user's home spot
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Keep polling timers accurate even while the window is invisible (no App Nap).
@@ -69,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         reposition()
         p.orderFrontRegardless()
 
+        model.onSetDefault = { [weak self] in self?.setDefaultPosition() }
         model.onResetPosition = { [weak self] in self?.resetPosition() }
         model.currentWindowOrigin = { [weak self] in self?.panel.frame.origin ?? .zero }
         model.onMoveWindowTo = { [weak self] p in self?.panel.setFrameOrigin(p) }
@@ -102,34 +104,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// has never been placed there, to a sensible default just above the dock.
     private func reposition() {
         guard let screen = dockScreen() else { return }
-        let f = screen.frame
-        let dockBand = screen.visibleFrame.minY - screen.frame.minY
 
-        var origin: NSPoint
+        // Prefer exactly where it was last left; else the user's saved default;
+        // else the built-in bottom-left home.
+        let origin: NSPoint
         let saved = savedOrigin(for: screen)
         if let saved, isReasonablyVisible(NSRect(origin: saved, size: Self.windowSize)) {
-            // Respect exactly where the user left it (even partly off an edge).
             origin = saved
         } else {
-            // Default: bottom-right, just above the dock band. On a centred dock
-            // (e.g. a big display) that reads as the bottom-right corner; on a wide
-            // dock (e.g. a laptop) it sits just above the dock's right end.
-            let band = dockBand > 8 ? dockBand : 8
-            let glassX = f.maxX - Self.glassW - 12
-            let glassY = f.minY + band + 6
-            origin = NSPoint(x: glassX - Self.margin, y: glassY - Self.margin)
+            origin = defaultOrigin(for: screen) ?? homeOrigin(for: screen)
         }
 
         let frame = NSRect(origin: origin, size: Self.windowSize)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
     }
 
+    /// Save wherever the widget currently sits as this screen's default "home".
+    private func setDefaultPosition() {
+        guard let screen = screenContaining(panel.frame) ?? dockScreen() else { return }
+        var all = defaults()
+        let o = panel.frame.origin
+        all[displayID(for: screen)] = [Double(o.x), Double(o.y)]
+        UserDefaults.standard.set(all, forKey: Self.defaultsKey)
+    }
+
+    /// Jump back to the saved default home (or the built-in bottom-left one).
     private func resetPosition() {
         guard let screen = screenContaining(panel.frame) ?? dockScreen() else { return }
-        var all = positions()
-        all.removeValue(forKey: displayID(for: screen))
-        UserDefaults.standard.set(all, forKey: Self.positionsKey)
-        reposition()
+        let target = defaultOrigin(for: screen) ?? homeOrigin(for: screen)
+        panel.setFrameOrigin(target) // windowDidMove persists this as the current spot
+    }
+
+    /// Built-in home: bottom-left, just above the dock band.
+    private func homeOrigin(for screen: NSScreen) -> NSPoint {
+        let f = screen.frame
+        let band = screen.visibleFrame.minY - screen.frame.minY
+        let b = band > 8 ? band : 8
+        return NSPoint(x: f.minX + 12 - Self.margin, y: f.minY + b + 6 - Self.margin)
     }
 
     /// Persist the panel's spot whenever the user finishes dragging it.
@@ -149,6 +160,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func savedOrigin(for screen: NSScreen) -> NSPoint? {
         guard let xy = positions()[displayID(for: screen)], xy.count == 2 else { return nil }
+        return NSPoint(x: xy[0], y: xy[1])
+    }
+
+    private func defaults() -> [String: [Double]] {
+        UserDefaults.standard.dictionary(forKey: Self.defaultsKey) as? [String: [Double]] ?? [:]
+    }
+
+    private func defaultOrigin(for screen: NSScreen) -> NSPoint? {
+        guard let xy = defaults()[displayID(for: screen)], xy.count == 2 else { return nil }
         return NSPoint(x: xy[0], y: xy[1])
     }
 

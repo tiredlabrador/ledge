@@ -22,7 +22,8 @@ final class PlayerModel: ObservableObject {
     @Published var visible = false
     @Published var sourceRunning = false
 
-    /// Called from the menu to clear the remembered position on this screen.
+    /// Menu actions: save the current spot as this screen's default, and jump back to it.
+    var onSetDefault: (() -> Void)?
     var onResetPosition: (() -> Void)?
 
     /// Window-drag plumbing, set by the app: read and set the panel's origin so

@@ -36,17 +36,18 @@ That's it. Start playing something and the widget appears.
 
 - **Hover** to reveal ⏮ ⏯ ⏭ and the time remaining.
 - **Drag the bar** along the bottom to scrub.
-- **Drag the pill** (grab it anywhere but the buttons) to move it. It remembers
-  where you put it on each screen and restores there next time.
-- **Right-click** for options: *Open Music/Spotify*, *Reset Position*,
-  *Start at Login*, *Quit*.
+- **Drag the pill** (grab it anywhere) to move it. It remembers where you put it on
+  each screen and restores there next time.
+- **Right-click** for options: *Open Music/Spotify*, *Set Default Position*,
+  *Reset to Default Position*, *Start at Login*, *Quit*.
 
 ### Where it sits
 
-Ledge starts in the bottom-right, just above your Dock, and follows whichever screen
-the Dock is on. Don't like that spot? Just drag it wherever you want — it stays put
-and remembers its place per display. *Reset Position* puts it back to the default. No
-special permissions needed for any of this.
+Ledge starts bottom-left, just above your Dock, and follows whichever screen the Dock
+is on. Drag it wherever you like — it stays put and remembers its place per display.
+Found your perfect spot? **Set Default Position** saves it as home, and **Reset to
+Default Position** snaps it back there whenever you want. No special permissions
+needed for any of this.
 
 ## Build from source
 
