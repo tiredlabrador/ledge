@@ -24,11 +24,15 @@ final class PlayerModel: ObservableObject {
 
     /// Whether to tuck the widget against the dock's left edge (needs Accessibility).
     /// Off = bottom-left corner, no extra permission.
-    @Published var snapToDock: Bool = (UserDefaults.standard.object(forKey: "LedgeSnapToDock") as? Bool) ?? false
+    @Published var snapToDock: Bool = (UserDefaults.standard.object(forKey: "LedgeSnapToDock") as? Bool) ?? true
+
+    /// Called when the user turns snapping on, so the app can request Accessibility.
+    var onRequestAX: (() -> Void)?
 
     func setSnap(_ on: Bool) {
         snapToDock = on
         UserDefaults.standard.set(on, forKey: "LedgeSnapToDock")
+        if on { onRequestAX?() }
         onUpdate?()
     }
 

@@ -10,6 +10,8 @@
 	<string>com.domhart.ledge</string>
 	<key>CFBundleExecutable</key>
 	<string>Ledge</string>
+	<key>CFBundleIconFile</key>
+	<string>Ledge</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleShortVersionString</key>

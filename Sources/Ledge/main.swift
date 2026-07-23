@@ -59,13 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.ignoresMouseEvents = true
         panel = p
 
-        // Ask for Accessibility once if snapping is on — that's what lets us read
-        // the dock's position. Declining just falls back to the corner.
-        if model.snapToDock { promptAXOnce() }
-
         reposition()
         p.orderFrontRegardless()
 
+        // Prompt for Accessibility only when the user opts into snapping (never
+        // nags on launch), so it can read the dock's position for the tucked look.
+        model.onRequestAX = { [weak self] in self?.promptAXOnce() }
         model.onUpdate = { [weak self] in self?.sync() }
         model.start()
 
@@ -77,7 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Fade the panel in/out to match whether music is (recently) playing.
     private func sync() {
-        if model.snapToDock && !AXIsProcessTrusted() { promptAXOnce() }
         reposition()
         let should = model.shouldShow
         guard should != visible else { return }
@@ -113,21 +111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let gap: CGFloat = 8
         var glass: NSRect
 
-        if model.snapToDock, let dock = dockFrameCocoa(), dock.width > dock.height {
-            if dock.minX >= gW + gap + 2 {
-                // Enough room beside the dock: tuck flush against its left edge.
-                glass = NSRect(x: dock.minX - gap - gW, y: dock.midY - gH / 2, width: gW, height: gH)
-            } else {
-                // Not enough room (e.g. a near-full-width laptop dock): float just
-                // above the dock, left edges aligned.
-                let x = max(f.minX + 8, dock.minX)
-                glass = NSRect(x: x, y: dock.maxY + 6, width: gW, height: gH)
-            }
+        let dock = model.snapToDock ? dockFrameCocoa() : nil
+        if let dock, dock.width > dock.height, dock.minX >= gW + gap + 2 {
+            // Room beside the (centred) dock: tuck flush against its left edge.
+            glass = NSRect(x: dock.minX - gap - gW, y: dock.midY - gH / 2, width: gW, height: gH)
+        } else if let dock, dock.width > dock.height {
+            // Wide dock (e.g. a near-full-width laptop dock): float just above its
+            // left end, so it never lands on top of the dock.
+            glass = NSRect(x: max(f.minX + 8, dock.minX), y: dock.maxY + 6, width: gW, height: gH)
         } else {
-            // Snapping off or Accessibility not granted: bottom-left corner.
-            let x = f.minX + 12
-            let center = f.minY + (dockBand > 8 ? dockBand / 2 : 40)
-            glass = NSRect(x: x, y: center - gH / 2, width: gW, height: gH)
+            // No dock reading (Accessibility off): float just above the dock band
+            // at the left edge. Safe on any screen — never collides with the dock.
+            glass = NSRect(x: f.minX + 12, y: f.minY + dockBand + 6, width: gW, height: gH)
         }
 
         let frame = glass.insetBy(dx: -Self.margin, dy: -Self.margin)

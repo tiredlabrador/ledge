@@ -16,9 +16,10 @@ lipo -create -output build-tmp/ledge-universal build-tmp/ledge-arm64 build-tmp/l
 
 APP="dist/Ledge.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
 cp build-tmp/ledge-universal "$APP/Contents/MacOS/Ledge"
+[ -f Ledge.icns ] && cp Ledge.icns "$APP/Contents/Resources/Ledge.icns"
 codesign --force --sign - "$APP"
 
 echo "Zipping…"

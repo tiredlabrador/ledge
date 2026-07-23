@@ -39,13 +39,14 @@ That's it. Start playing something and the widget appears.
 - **Click the artwork** to jump to the app it's playing from.
 - **Right-click** for options: *Snap next to Dock*, *Start at Login*, *Quit*.
 
-### Optional: snap it next to the Dock
+### Where it sits
 
-By default Ledge sits in the bottom-left corner. If you'd rather it tuck right up
-against the left edge of your Dock, right-click → **Snap next to Dock**, then grant
-**Accessibility** access when asked (System Settings → Privacy & Security →
-Accessibility). That permission is only used to read where your Dock is. It works
-best when your Dock isn't so wide that there's no room beside it.
+Ledge floats just above the left end of your Dock — it never covers it, and it
+follows whichever screen your Dock is on. If you grant it **Accessibility** access
+(right-click → **Snap next to Dock**), it can tuck flush *beside* the Dock when
+there's room, and falls back to floating above on a narrow screen where there
+isn't. That permission is only used to read where your Dock is, and macOS resets
+it whenever the app is updated, so the float-above default is the reliable one.
 
 ## Build from source
 
