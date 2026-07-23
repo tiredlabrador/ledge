@@ -135,8 +135,7 @@ struct WidgetView: View {
         .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
         .id(model.track?.id)
         .animation(.easeInOut(duration: 0.35), value: model.track?.id)
-        .onTapGesture { model.openSourceApp() }
-        .help("Open in \(model.track?.source == .spotify ? "Spotify" : "Music")")
+        .help("Drag to move • right-click for options")
     }
 
     // MARK: - Progress / scrubbing
@@ -192,9 +191,7 @@ struct WidgetView: View {
             model.openSourceApp()
         }
         Divider()
-        Button((model.snapToDock ? "✓ " : "") + "Snap next to Dock") {
-            model.setSnap(!model.snapToDock)
-        }
+        Button("Reset Position") { model.onResetPosition?() }
         Button((model.launchAtLogin ? "✓ " : "") + "Start at Login") {
             model.toggleLaunchAtLogin()
         }

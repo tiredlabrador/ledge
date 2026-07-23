@@ -1,11 +1,10 @@
 import AppKit
-import ApplicationServices
 import SwiftUI
 
 // MARK: - Panel
 
-/// Borderless, non-activating panel that floats above the desktop but never
-/// steals focus and never appears over full-screen apps (just like the dock hides).
+/// Borderless, non-activating panel that floats above the desktop, never steals
+/// focus, hides over full-screen apps, and can be dragged by its background.
 final class FloatPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect,
@@ -19,7 +18,8 @@ final class FloatPanel: NSPanel {
         isOpaque = false
         hasShadow = false // the SwiftUI glass draws its own
         hidesOnDeactivate = false
-        isMovable = false
+        isMovable = true
+        isMovableByWindowBackground = true // drag the pill anywhere but its controls
         becomesKeyOnlyIfNeeded = true
         acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
@@ -31,12 +31,11 @@ final class FloatPanel: NSPanel {
 
 // MARK: - App delegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let model = PlayerModel()
     private var panel: FloatPanel!
     private var visible = false
     private var activity: NSObjectProtocol?
-    private var promptedAX = false
 
     // Keep in sync with WidgetView.glassW / glassH / margin.
     private static let glassW: CGFloat = 270
@@ -45,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static var windowSize: NSSize {
         NSSize(width: glassW + margin * 2, height: glassH + margin * 2)
     }
+    private static let positionsKey = "LedgePositions" // [displayID: [x, y]] window origins
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Keep polling timers accurate even while the window is invisible (no App Nap).
@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let p = FloatPanel(contentRect: NSRect(origin: .zero, size: Self.windowSize))
         p.contentView = NSHostingView(rootView: WidgetView(model: model))
+        p.delegate = self
         p.alphaValue = 0
         p.ignoresMouseEvents = true
         panel = p
@@ -62,9 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reposition()
         p.orderFrontRegardless()
 
-        // Prompt for Accessibility only when the user opts into snapping (never
-        // nags on launch), so it can read the dock's position for the tucked look.
-        model.onRequestAX = { [weak self] in self?.promptAXOnce() }
+        model.onResetPosition = { [weak self] in self?.resetPosition() }
         model.onUpdate = { [weak self] in self?.sync() }
         model.start()
 
@@ -76,12 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Fade the panel in/out to match whether music is (recently) playing.
     private func sync() {
-        reposition()
         let should = model.shouldShow
         guard should != visible else { return }
         visible = should
         model.visible = should
         panel.ignoresMouseEvents = !should // an invisible window must not eat clicks
+        if should { reposition() } // place it correctly as it appears
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = should ? 0.45 : 0.9
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -91,84 +90,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Positioning
 
-    /// Position the glass. When snapping is on and Accessibility is granted, tuck
-    /// it flush against the dock's left edge, matched to the dock's height. Otherwise
-    /// sit in the bottom-left corner of whichever screen owns the dock.
+    /// Move the panel to its remembered spot on the current dock screen, or, if it
+    /// has never been placed there, to a sensible default just above the dock.
     private func reposition() {
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else { return }
-
-        var target: NSScreen?
-        var dockBand: CGFloat = 0
-        for s in screens {
-            let h = s.visibleFrame.minY - s.frame.minY
-            if h > 8 { target = s; dockBand = h; break }
-        }
-        let screen = target ?? NSScreen.main ?? screens[0]
+        guard let screen = dockScreen() else { return }
         let f = screen.frame
+        let dockBand = screen.visibleFrame.minY - screen.frame.minY
 
-        let gW = Self.glassW, gH = Self.glassH
-        let gap: CGFloat = 8
-        var glass: NSRect
-
-        let dock = model.snapToDock ? dockFrameCocoa() : nil
-        if let dock, dock.width > dock.height, dock.minX >= gW + gap + 2 {
-            // Room beside the (centred) dock: tuck flush against its left edge.
-            glass = NSRect(x: dock.minX - gap - gW, y: dock.midY - gH / 2, width: gW, height: gH)
-        } else if let dock, dock.width > dock.height {
-            // Wide dock (e.g. a near-full-width laptop dock): float just above its
-            // left end, so it never lands on top of the dock.
-            glass = NSRect(x: max(f.minX + 8, dock.minX), y: dock.maxY + 6, width: gW, height: gH)
+        var origin: NSPoint
+        if let saved = savedOrigin(for: screen) {
+            origin = saved
         } else {
-            // No dock reading (Accessibility off): float just above the dock band
-            // at the left edge. Safe on any screen — never collides with the dock.
-            glass = NSRect(x: f.minX + 12, y: f.minY + dockBand + 6, width: gW, height: gH)
+            // Default: glass floats just above the dock band, near the left edge.
+            let band = dockBand > 8 ? dockBand : 8
+            let glassX = f.minX + 12
+            let glassY = f.minY + band + 6
+            origin = NSPoint(x: glassX - Self.margin, y: glassY - Self.margin)
         }
 
-        let frame = glass.insetBy(dx: -Self.margin, dy: -Self.margin)
+        var frame = NSRect(origin: origin, size: Self.windowSize)
+        frame = clamp(frame, to: screen)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
     }
 
-    /// The dock's on-screen glass rect in Cocoa (bottom-left origin) coordinates,
-    /// or nil if Accessibility isn't granted or the dock can't be read.
-    private func dockFrameCocoa() -> NSRect? {
-        guard AXIsProcessTrusted() else { return nil }
-        guard let dock = NSRunningApplication
-            .runningApplications(withBundleIdentifier: "com.apple.dock").first else { return nil }
-
-        let appEl = AXUIElementCreateApplication(dock.processIdentifier)
-        var kidsRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appEl, kAXChildrenAttribute as CFString, &kidsRef) == .success,
-              let children = kidsRef as? [AXUIElement] else { return nil }
-
-        for child in children {
-            var roleRef: CFTypeRef?
-            AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef)
-            guard roleRef as? String == kAXListRole as String else { continue }
-
-            var posRef: CFTypeRef?
-            var sizeRef: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(child, kAXPositionAttribute as CFString, &posRef) == .success,
-                  AXUIElementCopyAttributeValue(child, kAXSizeAttribute as CFString, &sizeRef) == .success
-            else { return nil }
-
-            var p = CGPoint.zero
-            var s = CGSize.zero
-            AXValueGetValue(posRef as! AXValue, .cgPoint, &p)
-            AXValueGetValue(sizeRef as! AXValue, .cgSize, &s)
-
-            // AX is top-left origin on the primary display; flip to Cocoa bottom-left.
-            let primaryH = CGDisplayBounds(CGMainDisplayID()).height
-            return NSRect(x: p.x, y: primaryH - p.y - s.height, width: s.width, height: s.height)
-        }
-        return nil
+    private func resetPosition() {
+        guard let screen = screenContaining(panel.frame) ?? dockScreen() else { return }
+        var all = positions()
+        all.removeValue(forKey: displayID(for: screen))
+        UserDefaults.standard.set(all, forKey: Self.positionsKey)
+        reposition()
     }
 
-    private func promptAXOnce() {
-        guard !promptedAX, !AXIsProcessTrusted() else { return }
-        promptedAX = true
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+    /// Persist the panel's spot whenever the user finishes dragging it.
+    func windowDidMove(_ notification: Notification) {
+        guard let screen = screenContaining(panel.frame) else { return }
+        var all = positions()
+        let o = panel.frame.origin
+        all[displayID(for: screen)] = [Double(o.x), Double(o.y)]
+        UserDefaults.standard.set(all, forKey: Self.positionsKey)
+    }
+
+    // MARK: - Position storage / screen helpers
+
+    private func positions() -> [String: [Double]] {
+        UserDefaults.standard.dictionary(forKey: Self.positionsKey) as? [String: [Double]] ?? [:]
+    }
+
+    private func savedOrigin(for screen: NSScreen) -> NSPoint? {
+        guard let xy = positions()[displayID(for: screen)], xy.count == 2 else { return nil }
+        return NSPoint(x: xy[0], y: xy[1])
+    }
+
+    private func displayID(for screen: NSScreen) -> String {
+        let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        return num?.stringValue ?? "main"
+    }
+
+    /// Whichever screen currently hosts the dock (falls back to main / first).
+    private func dockScreen() -> NSScreen? {
+        for s in NSScreen.screens where s.visibleFrame.minY - s.frame.minY > 8 { return s }
+        return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func screenContaining(_ frame: NSRect) -> NSScreen? {
+        let c = NSPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first { $0.frame.contains(c) }
+    }
+
+    /// Keep the whole window on-screen.
+    private func clamp(_ frame: NSRect, to screen: NSScreen) -> NSRect {
+        let v = screen.frame
+        var r = frame
+        r.origin.x = min(max(r.origin.x, v.minX), v.maxX - r.width)
+        r.origin.y = min(max(r.origin.y, v.minY), v.maxY - r.height)
+        return r
     }
 }
 
