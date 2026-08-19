@@ -5,7 +5,8 @@ and artist of whatever you're playing in **Apple Music** or **Spotify**, wrapped
 in the same glass material as the Dock so it looks like an extension of it.
 
 It appears when music starts and quietly fades away a couple of minutes after you
-stop. Hover over it for playback controls.
+stop — or whenever you like, via **Hide After** in the right-click menu (10 seconds
+up to 5 minutes, or never). Hover over it for playback controls.
 
 <!-- Add a screenshot here if you like: ![Ledge](screenshot.png) -->
 
@@ -38,7 +39,7 @@ That's it. Start playing something and the widget appears.
 - **Drag the pill** (grab it anywhere) to move it. It remembers where you put it on
   each screen and restores there next time.
 - **Right-click** for options: *Open Music/Spotify*, *Set Default Position*,
-  *Reset to Default Position*, *Start at Login*, *Quit*.
+  *Reset to Default Position*, *Hide After*, *Start at Login*, *Quit*.
 
 ### Where it sits
 

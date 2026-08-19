@@ -45,11 +45,29 @@ final class PlayerModel: ObservableObject {
 
     private static let musicBundleID = "com.apple.Music"
     private static let spotifyBundleID = "com.spotify.client"
-    private static let hideDelay: TimeInterval = 120
+
+    /// How long the widget lingers after playback stops. `.infinity` = stay put.
+    static let hideDelayOptions: [(label: String, seconds: TimeInterval)] = [
+        ("10 seconds", 10),
+        ("30 seconds", 30),
+        ("1 minute", 60),
+        ("2 minutes", 120),
+        ("5 minutes", 300),
+        ("Never hide", .infinity)
+    ]
+
+    @Published private(set) var hideDelay: TimeInterval =
+        (UserDefaults.standard.object(forKey: "LedgeHideDelay") as? Double) ?? 120
+
+    func setHideDelay(_ seconds: TimeInterval) {
+        hideDelay = seconds
+        UserDefaults.standard.set(seconds, forKey: "LedgeHideDelay")
+        onUpdate?()
+    }
 
     var shouldShow: Bool {
         guard track != nil, sourceRunning else { return false }
-        return isPlaying || hovering || Date().timeIntervalSince(lastPlaying) < Self.hideDelay
+        return isPlaying || hovering || Date().timeIntervalSince(lastPlaying) < hideDelay
     }
 
     // MARK: - Lifecycle

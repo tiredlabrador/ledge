@@ -164,6 +164,13 @@ struct WidgetView: View {
         Divider()
         Button("Set Default Position") { model.onSetDefault?() }
         Button("Reset to Default Position") { model.onResetPosition?() }
+        Menu("Hide After") {
+            ForEach(PlayerModel.hideDelayOptions, id: \.label) { opt in
+                Button((model.hideDelay == opt.seconds ? "\u{2713} " : "") + opt.label) {
+                    model.setHideDelay(opt.seconds)
+                }
+            }
+        }
         Button((model.launchAtLogin ? "✓ " : "") + "Start at Login") {
             model.toggleLaunchAtLogin()
         }
