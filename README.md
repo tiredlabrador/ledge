@@ -38,8 +38,10 @@ That's it. Start playing something and the widget appears.
 - **Hover** to reveal ⏮ ⏯ ⏭ and the time remaining.
 - **Drag the pill** (grab it anywhere) to move it. It remembers where you put it on
   each screen and restores there next time.
-- **Right-click** for options: *Open Music/Spotify*, *Set Default Position*,
-  *Reset to Default Position*, *Hide After*, *Start at Login*, *Quit*.
+- **Right-click** for options: *Open Music/Spotify*, *Copy Song Info*,
+  *Set Default Position*, *Reset to Default Position*, *Hide After*,
+  *Start at Login*, *Quit*.
+- **Copy Song Info** puts `Title - Artist` on the clipboard, ready to paste.
 
 ### Where it sits
 

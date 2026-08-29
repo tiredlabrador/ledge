@@ -161,6 +161,8 @@ struct WidgetView: View {
         Button(model.track?.source == .spotify ? "Open Spotify" : "Open Music") {
             model.openSourceApp()
         }
+        Button("Copy Song Info") { model.copyTrackInfo() }
+            .disabled(model.track == nil)
         Divider()
         Button("Set Default Position") { model.onSetDefault?() }
         Button("Reset to Default Position") { model.onResetPosition?() }

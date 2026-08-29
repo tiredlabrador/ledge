@@ -272,6 +272,15 @@ final class PlayerModel: ObservableObject {
 
     // MARK: - Misc
 
+    /// Copy "Title - Artist" for the current track to the clipboard.
+    func copyTrackInfo() {
+        guard let t = track else { return }
+        let text = t.artist.isEmpty ? t.name : "\(t.name) - \(t.artist)"
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+    }
+
     func openSourceApp() {
         let bid = track?.source == .spotify ? Self.spotifyBundleID : Self.musicBundleID
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) else { return }
