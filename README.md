@@ -41,7 +41,7 @@ That's it. Start playing something and the widget appears.
 - **Right-click** for options: *Open Music/Spotify*, *Copy Song Info*,
   *Set Default Position*, *Reset to Default Position*, *Hide After*,
   *Start at Login*, *Quit*.
-- **Copy Song Info** puts `Title - Artist` on the clipboard, ready to paste.
+- **Copy Song Info** puts `Title Artist` on the clipboard, ready to paste.
 
 ### Where it sits
 
