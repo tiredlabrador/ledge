@@ -39,9 +39,11 @@ That's it. Start playing something and the widget appears.
 - **Drag the pill** (grab it anywhere) to move it. It remembers where you put it on
   each screen and restores there next time.
 - **Right-click** for options: *Open Music/Spotify*, *Copy Song Info*,
-  *Set Default Position*, *Reset to Default Position*, *Hide After*,
-  *Start at Login*, *Quit*.
+  *Hide For*, *Position*, *Auto-Hide After*, *Start at Login*, *Quit*.
 - **Copy Song Info** puts `Title Artist` on the clipboard, ready to paste.
+- **Hide For** gets it out of the way for 30 seconds, 1 minute, or 5 minutes —
+  it always comes back on its own.
+- **Auto-Hide After** sets how long it lingers once playback stops.
 
 ### Where it sits
 

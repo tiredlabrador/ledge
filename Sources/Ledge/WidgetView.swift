@@ -164,9 +164,17 @@ struct WidgetView: View {
         Button("Copy Song Info") { model.copyTrackInfo() }
             .disabled(model.track == nil)
         Divider()
-        Button("Set Default Position") { model.onSetDefault?() }
-        Button("Reset to Default Position") { model.onResetPosition?() }
-        Menu("Hide After") {
+        Menu("Hide For") {
+            ForEach(PlayerModel.snoozeOptions, id: \.label) { opt in
+                Button(opt.label) { model.snooze(opt.seconds) }
+            }
+        }
+        Divider()
+        Menu("Position") {
+            Button("Set Default Position") { model.onSetDefault?() }
+            Button("Reset to Default Position") { model.onResetPosition?() }
+        }
+        Menu("Auto-Hide After") {
             ForEach(PlayerModel.hideDelayOptions, id: \.label) { opt in
                 Button((model.hideDelay == opt.seconds ? "\u{2713} " : "") + opt.label) {
                     model.setHideDelay(opt.seconds)

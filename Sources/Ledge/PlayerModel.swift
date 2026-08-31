@@ -65,8 +65,28 @@ final class PlayerModel: ObservableObject {
         onUpdate?()
     }
 
+    /// Temporary manual hide ("get out of the way for a bit"). Always timed, so
+    /// the widget can never be hidden with no way to bring it back.
+    static let snoozeOptions: [(label: String, seconds: TimeInterval)] = [
+        ("30 seconds", 30),
+        ("1 minute", 60),
+        ("5 minutes", 300)
+    ]
+
+    private var hiddenUntil: Date?
+
+    func snooze(_ seconds: TimeInterval) {
+        hiddenUntil = Date().addingTimeInterval(seconds)
+        hovering = false // drop hover so it actually disappears under the cursor
+        onUpdate?()
+    }
+
     var shouldShow: Bool {
         guard track != nil, sourceRunning else { return false }
+        if let until = hiddenUntil {
+            if Date() < until { return false }
+            hiddenUntil = nil
+        }
         return isPlaying || hovering || Date().timeIntervalSince(lastPlaying) < hideDelay
     }
 
