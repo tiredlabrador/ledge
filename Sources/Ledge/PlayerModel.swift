@@ -37,7 +37,14 @@ final class PlayerModel: ObservableObject {
     var onUpdate: (() -> Void)?
 
     private var lastPlaying = Date.distantPast
-    private let queue = DispatchQueue(label: "ledge.scripting", qos: .userInitiated)
+    // One queue per source: if scripting one app hangs (Spotify's consent
+    // handshake can), the other source keeps updating.
+    private let musicQueue = DispatchQueue(label: "ledge.music", qos: .userInitiated)
+    private let spotifyQueue = DispatchQueue(label: "ledge.spotify", qos: .userInitiated)
+    private var musicBusy = false
+    private var spotifyBusy = false
+    private var latestMusic = Raw()
+    private var latestSpotify = Raw()
     // Artwork fetches run here so they don't wait behind the 1s status polls.
     private let artworkQueue = DispatchQueue(label: "ledge.artwork", qos: .userInitiated)
     private var timer: Timer?
@@ -92,33 +99,10 @@ final class PlayerModel: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// Which sources we've confirmed automation consent for. Scripting an app
-    /// without consent hangs inside AESendMessage with no visible prompt, so we
-    /// explicitly request consent first and only script once granted.
-    private var authorized: Set<String> = []
-    private var requesting: Set<String> = []
-
-    /// Ask TCC for automation consent (shows the system prompt if needed).
-    private func requestConsent(_ bundleID: String) {
-        guard !authorized.contains(bundleID), !requesting.contains(bundleID) else { return }
-        requesting.insert(bundleID)
-        // Blocks while the dialog is up, so keep it off the main thread —
-        // one dedicated thread per request, never the scripting queue.
-        Thread.detachNewThread { [weak self] in
-            var addr = AEAddressDesc()
-            let created = bundleID.utf8CString.withUnsafeBufferPointer { buf in
-                AECreateDesc(typeApplicationBundleID, buf.baseAddress, buf.count - 1, &addr)
-            }
-            guard created == noErr else { return }
-            let status = AEDeterminePermissionToAutomateTarget(&addr, typeWildCard, typeWildCard, true)
-            AEDisposeDesc(&addr)
-            NSLog("Ledge consent for %@: %d", bundleID, status)
-            DispatchQueue.main.async {
-                self?.requesting.remove(bundleID)
-                if status == noErr { self?.authorized.insert(bundleID); self?.poll() }
-            }
-        }
-    }
+    /// Sources macOS has told us we may not automate (user declined). We stop
+    /// hammering these but retry occasionally in case they change their mind.
+    private var denied: [String: Date] = [:]
+    private var activatedForPrompt = false
 
     func start() {
         poll()
@@ -157,20 +141,29 @@ final class PlayerModel: ObservableObject {
     }
 
     func poll() {
-        if isRunning(Self.musicBundleID) { requestConsent(Self.musicBundleID) }
-        if isRunning(Self.spotifyBundleID) { requestConsent(Self.spotifyBundleID) }
-        // Only script sources we hold consent for — anything else hangs the queue.
-        let queryMusic = authorized.contains(Self.musicBundleID) && isRunning(Self.musicBundleID)
-        let querySpotify = authorized.contains(Self.spotifyBundleID) && isRunning(Self.spotifyBundleID)
-        guard queryMusic || querySpotify else {
-            if track != nil { apply(music: Raw(), spotify: Raw()) }
-            return
-        }
+        pollSource(Self.musicBundleID, script: Self.musicStatusScript,
+                   queue: musicQueue, busy: \.musicBusy, latest: \.latestMusic)
+        pollSource(Self.spotifyBundleID, script: Self.spotifyStatusScript,
+                   queue: spotifyQueue, busy: \.spotifyBusy, latest: \.latestSpotify)
+        apply(music: latestMusic, spotify: latestSpotify)
+    }
+
+    private func pollSource(_ bundleID: String,
+                            script: String,
+                            queue: DispatchQueue,
+                            busy: ReferenceWritableKeyPath<PlayerModel, Bool>,
+                            latest: ReferenceWritableKeyPath<PlayerModel, Raw>) {
+        guard isRunning(bundleID) else { self[keyPath: latest] = Raw(); return }
+        if let since = denied[bundleID], Date().timeIntervalSince(since) < 60 { return }
+        guard !self[keyPath: busy] else { return } // a previous call is still out
+        self[keyPath: busy] = true
         queue.async { [weak self] in
             guard let self else { return }
-            let m = queryMusic ? self.query(Self.musicStatusScript, bundleID: Self.musicBundleID) : Raw()
-            let s = querySpotify ? self.query(Self.spotifyStatusScript, bundleID: Self.spotifyBundleID) : Raw()
-            DispatchQueue.main.async { self.apply(music: m, spotify: s) }
+            let r = self.query(script, bundleID: bundleID)
+            DispatchQueue.main.async {
+                self[keyPath: busy] = false
+                self[keyPath: latest] = r
+            }
         }
     }
 
@@ -181,7 +174,23 @@ final class PlayerModel: ObservableObject {
         var err: NSDictionary?
         guard let script = NSAppleScript(source: source),
               let out = script.executeAndReturnError(&err).stringValue else {
-            if let err { NSLog("Ledge query error: %@", err) }
+            if let err {
+                let code = (err[NSAppleScript.errorNumber] as? Int) ?? 0
+                NSLog("Ledge query error for %@: %d", bundleID, code)
+                switch code {
+                case -1743: // user declined automation for this app
+                    DispatchQueue.main.async { self.denied[bundleID] = Date() }
+                case -1744: // needs consent — the dialog only renders for a
+                            // foreground app, so activate once and let the next
+                            // poll's Apple Event raise the prompt.
+                    DispatchQueue.main.async {
+                        guard !self.activatedForPrompt else { return }
+                        self.activatedForPrompt = true
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                default: break
+                }
+            }
             return Raw()
         }
         let parts = out.components(separatedBy: "|~|")
@@ -282,7 +291,8 @@ final class PlayerModel: ObservableObject {
         let app = src == .music ? "Music" : "Spotify"
         let bundleID = src == .music ? Self.musicBundleID : Self.spotifyBundleID
         let script = "tell application \"\(app)\" to \(cmd)"
-        queue.async { [weak self] in
+        let q = src == .music ? musicQueue : spotifyQueue
+        q.async { [weak self] in
             guard let self, self.isRunning(bundleID) else { return }
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
