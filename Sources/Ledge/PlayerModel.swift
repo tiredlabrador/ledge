@@ -82,16 +82,43 @@ final class PlayerModel: ObservableObject {
 
     private var hiddenUntil: Date?
 
+    /// How long the hover "hide" button tucks the widget away.
+    static let quickHideSeconds: TimeInterval = 5
+
+    /// Set by the app: is the cursor over where the widget sits (even while hidden)?
+    var isMouseOverWidget: (() -> Bool)?
+
     func snooze(_ seconds: TimeInterval) {
         hiddenUntil = Date().addingTimeInterval(seconds)
         hovering = false // drop hover so it actually disappears under the cursor
         onUpdate?()
     }
 
+    // Getting-out-of-the-way options, both on by default.
+    @Published private(set) var showHideButton: Bool =
+        (UserDefaults.standard.object(forKey: "LedgeHideButton") as? Bool) ?? true
+    @Published private(set) var seeThroughEnabled: Bool =
+        (UserDefaults.standard.object(forKey: "LedgeSeeThrough") as? Bool) ?? true
+    /// Set by the app while the widget is ghosted by the Option key.
+    @Published var seeThrough = false
+
+    func toggleHideButton() {
+        showHideButton.toggle()
+        UserDefaults.standard.set(showHideButton, forKey: "LedgeHideButton")
+    }
+
+    func toggleSeeThrough() {
+        seeThroughEnabled.toggle()
+        UserDefaults.standard.set(seeThroughEnabled, forKey: "LedgeSeeThrough")
+        onUpdate?()
+    }
+
     var shouldShow: Bool {
         guard track != nil, sourceRunning else { return false }
         if let until = hiddenUntil {
-            if Date() < until { return false }
+            // Don't pop back while the cursor is still where the widget sits —
+            // it would land on top of whatever you're clicking.
+            if Date() < until || (isMouseOverWidget?() ?? false) { return false }
             hiddenUntil = nil
         }
         return isPlaying || hovering || Date().timeIntervalSince(lastPlaying) < hideDelay

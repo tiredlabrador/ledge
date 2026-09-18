@@ -39,10 +39,20 @@ That's it. Start playing something and the widget appears.
 - **Drag the pill** (grab it anywhere) to move it. It remembers where you put it on
   each screen and restores there next time.
 - **Right-click** for options: *Open Music/Spotify*, *Copy Song Info*,
-  *Hide For*, *Position*, *Auto-Hide After*, *Start at Login*, *Quit*.
+  *Hide*, *Position*, *Auto-Hide After*, *Start at Login*, *Quit*.
 - **Copy Song Info** puts `Title Artist` on the clipboard, ready to paste.
-- **Hide For** gets it out of the way for 30 seconds, 1 minute, or 5 minutes —
-  it always comes back on its own.
+
+### Getting it out of the way
+
+Handy on a laptop, where it can sit over something you need.
+
+- **Hide button** — hover and click the 👁‍🗨 eye icon to tuck it away for 5 seconds.
+  It won't come back while your mouse is still where it sits.
+- **See through** — with the mouse over it, tap **⌥ Option**. It turns almost
+  invisible and clicks go straight through to whatever's behind. Move the mouse
+  away and it's back.
+- **Hide → For…** tucks it away for 30 seconds, 1 minute or 5 minutes.
+- Both the hide button and see-through can be switched off under **Hide**.
 - **Auto-Hide After** sets how long it lingers once playback stops.
 
 ### Where it sits

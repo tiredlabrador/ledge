@@ -3,10 +3,17 @@ import SwiftUI
 
 /// The player pill. At rest: artwork + title + artist, roomy and centred.
 /// On hover: large playback controls take over the whole text area.
+/// View-local state. Kept in an ObservableObject rather than `@State`, because
+/// on the macOS 27 SDK `@State` is a macro whose plugin ships only with full
+/// Xcode — the Command Line Tools we build with can't compile it.
+final class WidgetUIState: ObservableObject {
+    @Published var hovering = false
+    var dragAnchor: (mouse: CGPoint, origin: CGPoint)?
+}
+
 struct WidgetView: View {
     @ObservedObject var model: PlayerModel
-    @State private var hovering = false
-    @State private var dragAnchor: (mouse: CGPoint, origin: CGPoint)?
+    @ObservedObject var ui: WidgetUIState
 
     // Keep in sync with AppDelegate.glassW / glassH / margin.
     static let glassW: CGFloat = 270
@@ -22,13 +29,22 @@ struct WidgetView: View {
             .offset(y: model.visible ? 0 : 4)
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: model.visible)
             .onHover { h in
-                withAnimation(.smooth(duration: 0.2)) { hovering = h }
+                withAnimation(.smooth(duration: 0.2)) { ui.hovering = h }
                 model.hovering = h
             }
+            // A hidden or ghosted window stops getting mouse events, so the
+            // hover-exit never arrives — reset it ourselves.
+            .onChange(of: model.visible) { _, v in if !v { clearHover() } }
+            .onChange(of: model.seeThrough) { _, on in if on { clearHover() } }
             .contentShape(Rectangle()) // whole pill is grabbable, not just the art/buttons
             .simultaneousGesture(dragGesture)
             .contextMenu { menu }
             .padding(Self.margin) // transparent margin inside the window for shadow room
+    }
+
+    private func clearHover() {
+        ui.hovering = false
+        model.hovering = false
     }
 
     /// Move the whole window to follow the cursor, using absolute screen mouse
@@ -38,14 +54,14 @@ struct WidgetView: View {
         DragGesture(minimumDistance: 3)
             .onChanged { _ in
                 let mouse = NSEvent.mouseLocation
-                let anchor = dragAnchor ?? (mouse, model.currentWindowOrigin?() ?? .zero)
-                if dragAnchor == nil { dragAnchor = anchor }
+                let anchor = ui.dragAnchor ?? (mouse, model.currentWindowOrigin?() ?? .zero)
+                if ui.dragAnchor == nil { ui.dragAnchor = anchor }
                 model.onMoveWindowTo?(CGPoint(
                     x: anchor.origin.x + (mouse.x - anchor.mouse.x),
                     y: anchor.origin.y + (mouse.y - anchor.mouse.y)
                 ))
             }
-            .onEnded { _ in dragAnchor = nil }
+            .onEnded { _ in ui.dragAnchor = nil }
     }
 
     private var content: some View {
@@ -53,10 +69,10 @@ struct WidgetView: View {
             artworkView
             ZStack(alignment: .leading) {
                 titleBlock
-                    .opacity(hovering ? 0 : 1)
+                    .opacity(ui.hovering ? 0 : 1)
                 controlsBlock
-                    .opacity(hovering ? 1 : 0)
-                    .allowsHitTesting(hovering)
+                    .opacity(ui.hovering ? 1 : 0)
+                    .allowsHitTesting(ui.hovering)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -90,7 +106,17 @@ struct WidgetView: View {
             Text(remainingText)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .padding(.trailing, 2)
+            if model.showHideButton {
+                Button { model.snooze(PlayerModel.quickHideSeconds) } label: {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .help("Hide for a few seconds")
+            }
         }
     }
 
@@ -164,9 +190,16 @@ struct WidgetView: View {
         Button("Copy Song Info") { model.copyTrackInfo() }
             .disabled(model.track == nil)
         Divider()
-        Menu("Hide For") {
+        Menu("Hide") {
             ForEach(PlayerModel.snoozeOptions, id: \.label) { opt in
-                Button(opt.label) { model.snooze(opt.seconds) }
+                Button("For " + opt.label) { model.snooze(opt.seconds) }
+            }
+            Divider()
+            Button((model.showHideButton ? "\u{2713} " : "") + "Show Hide Button") {
+                model.toggleHideButton()
+            }
+            Button((model.seeThroughEnabled ? "\u{2713} " : "") + "Tap \u{2325} Option to See Through") {
+                model.toggleSeeThrough()
             }
         }
         Divider()

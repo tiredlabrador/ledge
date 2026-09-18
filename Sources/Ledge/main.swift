@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: FloatPanel!
     private var visible = false
     private var activity: NSObjectProtocol?
+    private var seeThrough = false
+    private var seeThroughTimer: Timer?
 
     // Keep in sync with WidgetView.glassW / glassH / margin.
     private static let glassW: CGFloat = 270
@@ -61,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
 
         let p = FloatPanel(contentRect: NSRect(origin: .zero, size: Self.windowSize))
-        p.contentView = NSHostingView(rootView: WidgetView(model: model))
+        p.contentView = NSHostingView(rootView: WidgetView(model: model, ui: WidgetUIState()))
         p.delegate = self
         p.alphaValue = 0
         p.ignoresMouseEvents = true
@@ -74,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.onResetPosition = { [weak self] in self?.resetPosition() }
         model.currentWindowOrigin = { [weak self] in self?.panel.frame.origin ?? .zero }
         model.onMoveWindowTo = { [weak self] p in self?.panel.setFrameOrigin(p) }
+        model.isMouseOverWidget = { [weak self] in
+            guard let self else { return false }
+            return self.glassRect.contains(NSEvent.mouseLocation)
+        }
         model.onUpdate = { [weak self] in self?.sync() }
         model.start()
 
@@ -85,17 +91,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Fade the panel in/out to match whether music is (recently) playing.
     private func sync() {
+        updateSeeThroughTimer()
         let should = model.shouldShow
         guard should != visible else { return }
         visible = should
         model.visible = should
-        panel.ignoresMouseEvents = !should // an invisible window must not eat clicks
         if should { reposition() } // place it correctly as it appears
+        updateSeeThroughTimer()
+        applyAppearance(duration: should ? 0.45 : 0.9)
+    }
+
+    /// One place decides opacity and click-through, from visibility + see-through.
+    private func applyAppearance(duration: Double) {
+        // An invisible or ghosted window must never eat clicks meant for what's behind.
+        panel.ignoresMouseEvents = !visible || seeThrough
+        let target: CGFloat = !visible ? 0 : (seeThrough ? 0.12 : 1)
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = should ? 0.45 : 0.9
+            ctx.duration = duration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().alphaValue = should ? 1 : 0
+            panel.animator().alphaValue = target
         }
+    }
+
+    // MARK: - See-through (tap Option over the widget)
+
+    /// The visible glass pill, excluding the transparent shadow margin.
+    private var glassRect: NSRect {
+        panel.frame.insetBy(dx: Self.margin, dy: Self.margin)
+    }
+
+    /// Watch the Option key only while the widget is on screen. Reads the live
+    /// modifier state directly, so it needs no extra permissions.
+    private func updateSeeThroughTimer() {
+        if visible && model.seeThroughEnabled {
+            guard seeThroughTimer == nil else { return }
+            let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in self?.checkSeeThrough() }
+            RunLoop.main.add(t, forMode: .common)
+            seeThroughTimer = t
+        } else {
+            seeThroughTimer?.invalidate()
+            seeThroughTimer = nil
+            if seeThrough { setSeeThrough(false) }
+        }
+    }
+
+    /// Option over the widget → ghost it. It stays ghosted until the mouse leaves,
+    /// so you can let go of Option and click behind it normally (an Option-click
+    /// would mean something different in most apps).
+    private func checkSeeThrough() {
+        let over = glassRect.contains(NSEvent.mouseLocation)
+        if !seeThrough {
+            if over && NSEvent.modifierFlags.contains(.option) { setSeeThrough(true) }
+        } else if !over {
+            setSeeThrough(false)
+        }
+    }
+
+    private func setSeeThrough(_ on: Bool) {
+        seeThrough = on
+        model.seeThrough = on
+        applyAppearance(duration: on ? 0.12 : 0.25)
     }
 
     // MARK: - Positioning
