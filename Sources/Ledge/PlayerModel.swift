@@ -37,17 +37,17 @@ final class PlayerModel: ObservableObject {
     var onUpdate: (() -> Void)?
 
     private var lastPlaying = Date.distantPast
-    // One queue per source: if scripting one app hangs (Spotify's consent
-    // handshake can), the other source keeps updating.
-    private let musicQueue = DispatchQueue(label: "ledge.music", qos: .userInitiated)
-    private let spotifyQueue = DispatchQueue(label: "ledge.spotify", qos: .userInitiated)
+    // ALL AppleScript runs on this one serial queue. AppleScript isn't safe to
+    // run from several threads at once: it serialises everything behind a global
+    // lock anyway, and concurrent use deadlocked inside its compiler (v1.7-1.9).
+    private let scriptQueue = DispatchQueue(label: "ledge.scripting", qos: .userInitiated)
+    /// Status scripts compiled once and reused (touched only on scriptQueue).
+    private var compiled: [String: NSAppleScript] = [:]
     private var musicBusy = false
     private var spotifyBusy = false
     private var latestMusic = Raw()
     private var latestSpotify = Raw()
     private var busySince: [String: Date] = [:]
-    // Artwork fetches run here so they don't wait behind the 1s status polls.
-    private let artworkQueue = DispatchQueue(label: "ledge.artwork", qos: .userInitiated)
     private var timer: Timer?
     private var artworkCache: [String: NSImage] = [:]
 
@@ -170,9 +170,9 @@ final class PlayerModel: ObservableObject {
 
     func poll() {
         pollSource(Self.musicBundleID, script: Self.musicStatusScript,
-                   queue: musicQueue, busy: \.musicBusy, latest: \.latestMusic)
+                   queue: scriptQueue, busy: \.musicBusy, latest: \.latestMusic)
         pollSource(Self.spotifyBundleID, script: Self.spotifyStatusScript,
-                   queue: spotifyQueue, busy: \.spotifyBusy, latest: \.latestSpotify)
+                   queue: scriptQueue, busy: \.spotifyBusy, latest: \.latestSpotify)
         apply(music: latestMusic, spotify: latestSpotify)
     }
 
@@ -217,7 +217,13 @@ final class PlayerModel: ObservableObject {
         // an Apple Event to a quit app relaunches it, so bail if it's gone now.
         guard isRunning(bundleID) else { return Raw() }
         var err: NSDictionary?
-        guard let script = NSAppleScript(source: source),
+        // Compile once (only once the app is known to be running — compiling a
+        // `tell` for a quit app would relaunch it), then reuse every poll.
+        if compiled[source] == nil, let fresh = NSAppleScript(source: source) {
+            var cerr: NSDictionary?
+            if fresh.compileAndReturnError(&cerr) { compiled[source] = fresh }
+        }
+        guard let script = compiled[source],
               let out = script.executeAndReturnError(&err).stringValue else {
             if let err {
                 let code = (err[NSAppleScript.errorNumber] as? Int) ?? 0
@@ -299,7 +305,7 @@ final class PlayerModel: ObservableObject {
                 DispatchQueue.main.async { self?.store(img, for: t) }
             }.resume()
         case .music:
-            artworkQueue.async { [weak self] in
+            scriptQueue.async { [weak self] in
                 guard let self, self.isRunning(Self.musicBundleID) else { return }
                 var err: NSDictionary?
                 let src = "with timeout of 5 seconds\ntell application \"Music\" to get raw data of artwork 1 of current track\nend timeout"
@@ -336,8 +342,7 @@ final class PlayerModel: ObservableObject {
         let app = src == .music ? "Music" : "Spotify"
         let bundleID = src == .music ? Self.musicBundleID : Self.spotifyBundleID
         let script = "with timeout of 3 seconds\ntell application \"\(app)\" to \(cmd)\nend timeout"
-        let q = src == .music ? musicQueue : spotifyQueue
-        q.async { [weak self] in
+        scriptQueue.async { [weak self] in
             guard let self, self.isRunning(bundleID) else { return }
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
