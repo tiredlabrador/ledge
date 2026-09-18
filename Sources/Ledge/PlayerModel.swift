@@ -45,6 +45,7 @@ final class PlayerModel: ObservableObject {
     private var spotifyBusy = false
     private var latestMusic = Raw()
     private var latestSpotify = Raw()
+    private var busySince: [String: Date] = [:]
     // Artwork fetches run here so they don't wait behind the 1s status polls.
     private let artworkQueue = DispatchQueue(label: "ledge.artwork", qos: .userInitiated)
     private var timer: Timer?
@@ -182,8 +183,25 @@ final class PlayerModel: ObservableObject {
                             latest: ReferenceWritableKeyPath<PlayerModel, Raw>) {
         guard isRunning(bundleID) else { self[keyPath: latest] = Raw(); return }
         if let since = denied[bundleID], Date().timeIntervalSince(since) < 60 { return }
-        guard !self[keyPath: busy] else { return } // a previous call is still out
+        if self[keyPath: busy] {
+            // A request that still hasn't answered: stop showing what it said last
+            // time, so a stale song doesn't hang around.
+            if let t = busySince[bundleID] {
+                let waited = Date().timeIntervalSince(t)
+                // No answer after 4s usually means macOS is waiting on a
+                // permission prompt (it re-asks after every app update) that
+                // can't appear while Ledge is in the background. `with timeout`
+                // doesn't cover that wait, so bring Ledge forward once to let it show.
+                if waited > 4, !activatedForPrompt {
+                    activatedForPrompt = true
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                if waited > 8 { self[keyPath: latest] = Raw() }
+            }
+            return
+        }
         self[keyPath: busy] = true
+        busySince[bundleID] = Date()
         queue.async { [weak self] in
             guard let self else { return }
             let r = self.query(script, bundleID: bundleID)
@@ -284,7 +302,7 @@ final class PlayerModel: ObservableObject {
             artworkQueue.async { [weak self] in
                 guard let self, self.isRunning(Self.musicBundleID) else { return }
                 var err: NSDictionary?
-                let src = "tell application \"Music\" to get raw data of artwork 1 of current track"
+                let src = "with timeout of 5 seconds\ntell application \"Music\" to get raw data of artwork 1 of current track\nend timeout"
                 let desc = NSAppleScript(source: src)?.executeAndReturnError(&err)
                 guard let d = desc?.data, !d.isEmpty, let img = NSImage(data: d) else { return }
                 DispatchQueue.main.async { self.store(img, for: t) }
@@ -317,7 +335,7 @@ final class PlayerModel: ObservableObject {
         guard let src = track?.source else { return }
         let app = src == .music ? "Music" : "Spotify"
         let bundleID = src == .music ? Self.musicBundleID : Self.spotifyBundleID
-        let script = "tell application \"\(app)\" to \(cmd)"
+        let script = "with timeout of 3 seconds\ntell application \"\(app)\" to \(cmd)\nend timeout"
         let q = src == .music ? musicQueue : spotifyQueue
         q.async { [weak self] in
             guard let self, self.isRunning(bundleID) else { return }
@@ -358,6 +376,7 @@ final class PlayerModel: ObservableObject {
     // MARK: - Scripts
 
     private static let musicStatusScript = """
+    with timeout of 3 seconds
     tell application "Music"
         set theState to (player state as string)
         if theState is "playing" or theState is "paused" then
@@ -370,9 +389,11 @@ final class PlayerModel: ObservableObject {
         end if
         return theState
     end tell
+    end timeout
     """
 
     private static let spotifyStatusScript = """
+    with timeout of 3 seconds
     tell application "Spotify"
         set theState to (player state as string)
         if theState is "playing" or theState is "paused" then
@@ -385,5 +406,6 @@ final class PlayerModel: ObservableObject {
         end if
         return theState
     end tell
+    end timeout
     """
 }
